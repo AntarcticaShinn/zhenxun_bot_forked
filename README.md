@@ -18,6 +18,11 @@
 ## 声明
 此项目仅用于学习交流，请勿用于非法用途
 
+# Nonebot2
+<img style="height: 200px;width: 200px;" src="https://camo.githubusercontent.com/0ef71e86056da694c540790aa4a4e314396884d6c4fdb95362a7538b27a1b034/68747470733a2f2f76322e6e6f6e65626f742e6465762f6c6f676f2e706e67">
+
+非常 [ **[NICE](https://github.com/nonebot/nonebot2)** ] 的OneBot框架
+
 ## 未完成的文档
 
 # [传送门](https://hibikier.github.io/zhenxun_bot/)
@@ -237,6 +242,18 @@ __Docker 最新版本由 [Sakuracio](https://github.com/Sakuracio) 提供__
 
 
 ## 更新
+
+### 2022/5/25
+
+* 修复webui中CountLimit字段limit_type类型错误
+
+### 2022/5/24
+
+* fix: 修正了签到时日期时间的显示不补齐零的bug （符合日期时间表示法 ISO 8601）[@pull/600](https://github.com/HibiKier/zhenxun_bot/pull/600)
+* 更新"微博热搜"接口 [@pull/579](https://github.com/HibiKier/zhenxun_bot/pull/579)
+* refactor&fix(manager): modify argument [@pull/576](https://github.com/HibiKier/zhenxun_bot/pull/576)
+* 修复复读不能复读图片的问题 [@pull/573](https://github.com/HibiKier/zhenxun_bot/pull/573)
+* 修复抽卡插件：方舟抽卡的抽取和显示问题 [@pull/581](https://github.com/HibiKier/zhenxun_bot/pull/581)
 
 ### 2022/5/23 \[v0.1.5.6]
 
