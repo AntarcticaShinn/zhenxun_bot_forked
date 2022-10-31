@@ -1,6 +1,6 @@
+from utils.image_utils import get_img_hash
 from nonebot.adapters.onebot.v11.permission import GROUP
 from configs.path_config import TEMP_PATH
-from utils.image_utils import get_img_hash
 import random
 from utils.message_builder import image
 from nonebot import on_message
@@ -90,7 +90,7 @@ async def _(event: GroupMessageEvent):
     if not img and not msg:
         return
     if img:
-        img_hash = await get_fudu_img_hash(img[0], event.group_id)
+        img_hash = await get_fudu_img_hash(img[0],event.group_id)
     else:
         img_hash = ""
     add_msg = msg + "|-|" + img_hash

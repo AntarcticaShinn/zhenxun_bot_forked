@@ -16,29 +16,35 @@ class GoodsInfo(db.Model):
     daily_purchase_limit = db.Column(
         db.JSON(), nullable=False, default={}
     )  # 每日购买限制数据存储
+    is_passive = db.Column(db.Boolean(), nullable=False, default=0)  # 是否为被动
+    icon = db.Column(db.String(), default=0)  # 图标
 
     _idx1 = db.Index("goods_group_users_idx1", "goods_name", unique=True)
 
     @classmethod
     async def add_goods(
-        cls,
-        goods_name: str,
-        goods_price: int,
-        goods_description: str,
-        goods_discount: float = 1,
-        goods_limit_time: int = 0,
-        daily_limit: int = 0,
+            cls,
+            goods_name: str,
+            goods_price: int,
+            goods_description: str,
+            goods_discount: float = 1,
+            goods_limit_time: int = 0,
+            daily_limit: int = 0,
+            is_passive: bool = False,
+            icon: Optional[str] = None,
     ) -> bool:
         """
-        说明：
+        说明:
             添加商品
-        参数：
+        参数:
             :param goods_name: 商品名称
             :param goods_price: 商品价格
             :param goods_description: 商品简介
             :param goods_discount: 商品折扣
             :param goods_limit_time: 商品限时
             :param daily_limit: 每日购买限制
+            :param is_passive: 是否为被动道具
+            :param icon: 图标
         """
         try:
             if not await cls.get_goods_info(goods_name):
@@ -49,24 +55,26 @@ class GoodsInfo(db.Model):
                     goods_discount=goods_discount,
                     goods_limit_time=goods_limit_time,
                     daily_limit=daily_limit,
+                    is_passive=is_passive,
+                    icon=icon
                 )
                 return True
         except Exception as e:
-            logger.error(f"GoodsInfo add_goods 发生错误 {type(e)}：{e}")
+            logger.error(f"GoodsInfo add_goods {goods_name} 发生错误 {type(e)}：{e}")
         return False
 
     @classmethod
     async def delete_goods(cls, goods_name: str) -> bool:
         """
-        说明：
+        说明:
             删除商品
-        参数：
+        参数:
             :param goods_name: 商品名称
         """
         query = (
             await cls.query.where(cls.goods_name == goods_name)
-            .with_for_update()
-            .gino.first()
+                .with_for_update()
+                .gino.first()
         )
         if not query:
             return False
@@ -75,30 +83,34 @@ class GoodsInfo(db.Model):
 
     @classmethod
     async def update_goods(
-        cls,
-        goods_name: str,
-        goods_price: Optional[int] = None,
-        goods_description: Optional[str] = None,
-        goods_discount: Optional[float] = None,
-        goods_limit_time: Optional[int] = None,
-        daily_limit: Optional[int] = None
+            cls,
+            goods_name: str,
+            goods_price: Optional[int] = None,
+            goods_description: Optional[str] = None,
+            goods_discount: Optional[float] = None,
+            goods_limit_time: Optional[int] = None,
+            daily_limit: Optional[int] = None,
+            is_passive: Optional[bool] = None,
+            icon: Optional[str] = None,
     ) -> bool:
         """
-        说明：
+        说明:
             更新商品信息
-        参数：
+        参数:
             :param goods_name: 商品名称
             :param goods_price: 商品价格
             :param goods_description: 商品简介
             :param goods_discount: 商品折扣
             :param goods_limit_time: 商品限时时间
             :param daily_limit: 每日次数限制
+            :param is_passive: 是否为被动
+            :param icon: 图标
         """
         try:
             query = (
                 await cls.query.where(cls.goods_name == goods_name)
-                .with_for_update()
-                .gino.first()
+                    .with_for_update()
+                    .gino.first()
             )
             if not query:
                 return False
@@ -106,8 +118,10 @@ class GoodsInfo(db.Model):
                 goods_price=goods_price or query.goods_price,
                 goods_description=goods_description or query.goods_description,
                 goods_discount=goods_discount or query.goods_discount,
-                goods_limit_time=goods_limit_time or query.goods_limit_time,
-                daily_limit=daily_limit or query.daily_limit,
+                goods_limit_time=goods_limit_time if goods_limit_time is not None else query.goods_limit_time,
+                daily_limit=daily_limit if daily_limit is not None else query.daily_limit,
+                is_passive=is_passive if is_passive is not None else query.is_passive,
+                icon=icon or query.icon
             ).apply()
             return True
         except Exception as e:
@@ -117,9 +131,9 @@ class GoodsInfo(db.Model):
     @classmethod
     async def get_goods_info(cls, goods_name: str) -> "GoodsInfo":
         """
-        说明：
+        说明:
             获取商品对象
-        参数：
+        参数:
             :param goods_name: 商品名称
         """
         return await cls.query.where(cls.goods_name == goods_name).gino.first()
@@ -127,7 +141,7 @@ class GoodsInfo(db.Model):
     @classmethod
     async def get_all_goods(cls) -> List["GoodsInfo"]:
         """
-        说明：
+        说明:
             获得全部有序商品对象
         """
         query = await cls.query.gino.all()
@@ -141,12 +155,12 @@ class GoodsInfo(db.Model):
 
     @classmethod
     async def add_user_daily_purchase(
-        cls, goods: "GoodsInfo", user_id: int, group_id: int, num: int = 1
+            cls, goods: "GoodsInfo", user_id: int, group_id: int, num: int = 1
     ):
         """
-        说明：
+        说明:
             添加用户明日购买限制
-        参数：
+        参数:
             :param goods: 商品
             :param user_id: 用户id
             :param group_id: 群号
@@ -164,12 +178,12 @@ class GoodsInfo(db.Model):
 
     @classmethod
     async def check_user_daily_purchase(
-        cls, goods: "GoodsInfo", user_id: int, group_id: int, num: int = 1
+            cls, goods: "GoodsInfo", user_id: int, group_id: int, num: int = 1
     ) -> Tuple[bool, int]:
         """
-        说明：
+        说明:
             检测用户每日购买上限
-        参数：
+        参数:
             :param goods: 商品
             :param user_id: 用户id
             :param group_id: 群号
@@ -177,7 +191,7 @@ class GoodsInfo(db.Model):
         """
         user_id = str(user_id)
         group_id = str(group_id)
-        if goods:
+        if goods and goods.daily_limit > 0:
             if (
                 not goods.daily_limit
                 or not goods.daily_purchase_limit.get(group_id)
@@ -197,4 +211,3 @@ class GoodsInfo(db.Model):
         重置每次次数限制
         """
         await cls.update.values(daily_purchase_limit={}).gino.status()
-

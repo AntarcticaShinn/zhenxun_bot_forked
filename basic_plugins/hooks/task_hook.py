@@ -6,7 +6,7 @@ import re
 
 
 @Bot.on_calling_api
-async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
+async def _(bot: Bot, api: str, data: Dict[str, Any]):
     r = None
     if (
         (
@@ -33,6 +33,8 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
         )
         and r.group(1) in group_manager.get_task_data().keys()
     ):
+        # if bot.self_id in bot.config.superusers:
+        #     raise MockApiException(f"禁止社死...")
         task = r.group(1)
         group_id = data["group_id"]
         if group_manager.get_group_level(
