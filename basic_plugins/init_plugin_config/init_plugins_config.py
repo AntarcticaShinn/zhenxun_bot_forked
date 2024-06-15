@@ -1,125 +1,98 @@
-import asyncio
-from datetime import datetime, timedelta
 from pathlib import Path
-from ruamel.yaml import round_trip_load, round_trip_dump, YAML
-from utils.manager import admin_manager, plugins_manager
+
+from ruamel import yaml
+from ruamel.yaml import YAML, round_trip_dump, round_trip_load
+
 from configs.config import Config
+from configs.path_config import DATA_PATH
 from services.log import logger
+from utils.manager import admin_manager, plugin_data_manager, plugins_manager
 from utils.text_utils import prompt2cn
 from utils.utils import get_matchers
-from utils.utils import scheduler
-from ruamel import yaml
-
 
 _yaml = YAML(typ="safe")
 
 
-def init_plugins_config(data_path):
+def init_plugins_config():
     """
     初始化插件数据配置
     """
-    plugins2config_file = data_path / "configs" / "plugins2config.yaml"
-    plugins2config_file.parent.mkdir(parents=True, exist_ok=True)
-    _data = {}
-    if plugins2config_file.exists():
-        _data = _yaml.load(open(plugins2config_file, "r", encoding="utf8"))
-    _matchers = get_matchers(True)
+    plugins2config_file = DATA_PATH / "configs" / "plugins2config.yaml"
+    _data = Config.get_data()
     # 优先使用 metadata 数据
-    for matcher in _matchers:
-        _plugin = matcher.plugin
-        if not _plugin:
-            continue
-        metadata = _plugin.metadata
-        try:
-            _module = _plugin.module
-        except AttributeError:
-            continue
-        plugin_version = None
-        if metadata:
-            plugin_version = metadata.extra.get("version")
-        if not plugin_version:
-            try:
-                plugin_version = _module.__getattribute__("__plugin_version__")
-            except AttributeError:
-                pass
-        if metadata and metadata.config:
-            plugin_configs = {}
-            for key, value in metadata.config.__fields__.items():
-                plugin_configs[key.upper()] = {
-                    "value": value.default,
-                    "default_value": value.default
-                }
-        else:
-            try:
-                plugin_configs = _module.__getattribute__("__plugin_configs__")
-            except AttributeError:
-                continue
-        # 插件配置版本更新或为Version为None或不在存储配置内，当使用metadata时，必定更新
-        if isinstance(plugin_version, str) or (
-            plugin_version is None
-            or (
-                _data.get(matcher.plugin_name)
-                and _data[matcher.plugin_name].keys() != plugin_configs.keys()
-            )
-            or plugin_version > plugins_manager.get(matcher.plugin_name)["version"]
-            or matcher.plugin_name not in _data.keys()
-        ):
-            for key in plugin_configs:
-                if isinstance(plugin_configs[key], dict):
-                    Config.add_plugin_config(
-                        matcher.plugin_name,
-                        key,
-                        plugin_configs[key].get("value"),
-                        help_=plugin_configs[key].get("help"),
-                        default_value=plugin_configs[key].get("default_value"),
-                        _override=True,
+    for matcher in get_matchers(True):
+        if matcher.plugin_name:
+            if plugin_data := plugin_data_manager.get(matcher.plugin_name):
+                # 插件配置版本更新或为Version为None或不在存储配置内，当使用metadata时，必定更新
+                version = plugin_data.plugin_status.version
+                config = _data.get(matcher.plugin_name)
+                plugin = plugins_manager.get(matcher.plugin_name)
+                if plugin_data.plugin_configs and (
+                    isinstance(version, str)
+                    or (
+                        version is None
+                        or (
+                            config
+                            and config.configs.keys()
+                            != plugin_data.plugin_configs.keys()
+                        )
+                        or version > int(plugin.version or 0)
+                        or matcher.plugin_name not in _data.keys()
                     )
-                else:
-                    Config.add_plugin_config(
-                        matcher.plugin_name, key, plugin_configs[key]
-                    )
-        else:
-            plugin_configs = _data[matcher.plugin_name]
-            for key in plugin_configs:
-                Config.add_plugin_config(
-                    matcher.plugin_name,
-                    key,
-                    plugin_configs[key]["value"],
-                    help_=plugin_configs[key]["help"],
-                    default_value=plugin_configs[key]["default_value"],
-                    _override=True,
-                )
+                ):
+                    plugin_configs = plugin_data.plugin_configs
+                    for key in plugin_configs:
+                        if isinstance(plugin_data.plugin_configs[key], dict):
+                            Config.add_plugin_config(
+                                matcher.plugin_name,
+                                key,
+                                plugin_configs[key].get("value"),
+                                help_=plugin_configs[key].get("help"),
+                                default_value=plugin_configs[key].get("default_value"),
+                                _override=True,
+                                type=plugin_configs[key].get("type"),
+                            )
+                        else:
+                            config = plugin_configs[key]
+                            Config.add_plugin_config(
+                                matcher.plugin_name,
+                                key,
+                                config.value,
+                                name=config.name,
+                                help_=config.help,
+                                default_value=config.default_value,
+                                _override=True,
+                                type=config.type,
+                            )
+                elif plugin_configs := _data.get(matcher.plugin_name):
+                    for key in plugin_configs.configs:
+                        Config.add_plugin_config(
+                            matcher.plugin_name,
+                            key,
+                            plugin_configs.configs[key].value,
+                            help_=plugin_configs.configs[key].help,
+                            default_value=plugin_configs.configs[key].default_value,
+                            _override=True,
+                            type=plugin_configs.configs[key].type,
+                        )
     if not Config.is_empty():
         Config.save()
         _data = round_trip_load(open(plugins2config_file, encoding="utf8"))
         for plugin in _data.keys():
             try:
-                plugin_name = plugins_manager.get(plugin)["plugin_name"]
+                plugin_name = plugins_manager.get(plugin).plugin_name
             except (AttributeError, TypeError):
                 plugin_name = plugin
             _data[plugin].yaml_set_start_comment(plugin_name, indent=2)
         # 初始化未设置的管理员权限等级
         for k, v in Config.get_admin_level_data():
-            try:
-                admin_manager.set_admin_level(k, v)
-            except KeyError as e:
-                raise KeyError(f"{e} ****** 请检查是否有插件加载失败 ******")
+            admin_manager.set_admin_level(k, v)
         # 存完插件基本设置
         with open(plugins2config_file, "w", encoding="utf8") as wf:
             round_trip_dump(
                 _data, wf, indent=2, Dumper=yaml.RoundTripDumper, allow_unicode=True
             )
-    user_config_file = Path() / "configs" / "config.yaml"
-    # if not user_config_file.exists():
     _replace_config()
-    # else:
-    #     logger.info('五分钟后将进行配置数据替换，请注意...')
-    #     scheduler.add_job(
-    #         _replace_config,
-    #         "date",
-    #         run_date=datetime.now() + timedelta(minutes=5),
-    #         id=f"_replace_config"
-    #     )
 
 
 def _replace_config():
@@ -137,7 +110,7 @@ def _replace_config():
     # 数据替换
     for plugin in Config.keys():
         _tmp_data[plugin] = {}
-        for k in Config[plugin].keys():
+        for k in Config[plugin].configs.keys():
             try:
                 if _data.get(plugin) and k in _data[plugin].keys():
                     Config.set_config(plugin, k, _data[plugin][k])
@@ -159,9 +132,7 @@ def _replace_config():
     temp_file = Path() / "configs" / "temp_config.yaml"
     try:
         with open(temp_file, "w", encoding="utf8") as wf:
-            yaml.dump(
-                _tmp_data, wf, Dumper=yaml.RoundTripDumper, allow_unicode=True
-            )
+            yaml.dump(_tmp_data, wf, Dumper=yaml.RoundTripDumper, allow_unicode=True)
         with open(temp_file, "r", encoding="utf8") as rf:
             _data = round_trip_load(rf)
         # 添加注释
@@ -169,19 +140,19 @@ def _replace_config():
             rst = ""
             plugin_name = None
             try:
-                plugin_data = Config.get(plugin)
-                for x in list(Config.get(plugin).keys()):
-                    try:
-                        _x = plugin_data[x].get("name")
-                        if _x:
-                            plugin_name = _x
-                    except AttributeError:
-                        pass
+                if config_group := Config.get(plugin):
+                    for key in list(config_group.configs.keys()):
+                        try:
+                            if config := config_group.configs[key]:
+                                if config.name:
+                                    plugin_name = config.name
+                        except AttributeError:
+                            pass
             except (KeyError, AttributeError):
                 plugin_name = None
             if not plugin_name:
                 try:
-                    plugin_name = plugins_manager.get(plugin)["plugin_name"]
+                    plugin_name = plugins_manager.get(plugin).plugin_name
                 except (AttributeError, TypeError):
                     plugin_name = plugin
             plugin_name = (
@@ -192,12 +163,10 @@ def _replace_config():
             )
             rst += plugin_name + "\n"
             for k in _data[plugin].keys():
-                rst += f'{k}: {Config[plugin][k]["help"]}' + "\n"
+                rst += f"{k}: {Config[plugin].configs[k].help}" + "\n"
             _data[plugin].yaml_set_start_comment(rst[:-1], indent=2)
         with open(Path() / "configs" / "config.yaml", "w", encoding="utf8") as wf:
-            round_trip_dump(
-                _data, wf, Dumper=yaml.RoundTripDumper, allow_unicode=True
-            )
+            round_trip_dump(_data, wf, Dumper=yaml.RoundTripDumper, allow_unicode=True)
     except Exception as e:
         logger.error(f"生成简易配置注释错误 {type(e)}：{e}")
     if temp_file.exists():

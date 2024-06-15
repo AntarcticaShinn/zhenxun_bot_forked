@@ -1,14 +1,16 @@
-from nonebot import on_command
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent, Message
-from models.group_info import GroupInfo
-from configs.path_config import DATA_PATH, IMAGE_PATH
-from nonebot.params import CommandArg, Command
-from utils.image_utils import BuildMat
-from utils.message_builder import image
-from utils.manager import plugins2settings_manager
-from typing import Tuple
 import asyncio
 import os
+
+from nonebot import on_command
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent
+from nonebot.params import  CommandArg
+
+from configs.path_config import DATA_PATH, IMAGE_PATH
+from models.group_info import GroupInfo
+from utils.depends import OneCommand
+from utils.image_utils import BuildMat
+from utils.manager import plugins2settings_manager
+from utils.message_builder import image
 
 try:
     import ujson as json
@@ -89,7 +91,7 @@ statistics_user_file = DATA_PATH / "statistics" / "_prefix_user_count.json"
 
 
 @statistics.handle()
-async def _(bot: Bot, event: MessageEvent, cmd: Tuple[str, ...] = Command(), arg: Message = CommandArg()):
+async def _(bot: Bot, event: MessageEvent, cmd: str = OneCommand(), arg: Message = CommandArg()):
     msg = arg.extract_plain_text().strip()
     if cmd[0][:2] == "全局":
         if str(event.user_id) in bot.config.superusers:
@@ -160,8 +162,8 @@ async def _(bot: Bot, event: MessageEvent, cmd: Tuple[str, ...] = Command(), arg
     day_index = data["day_index"]
     data = data[arg][key]
     if _type == "group":
-        name = await GroupInfo.get_group_info(event.group_id)
-        name = name.group_name if name else str(event.group_id)
+        group = await GroupInfo.filter(group_id=str(event.group_id)).first()
+        name = group if group else str(event.group_id)
     else:
         name = event.sender.card or event.sender.nickname
     img = await generate_statistics_img(data, arg, name, plugin, day_index)
@@ -172,8 +174,8 @@ async def generate_statistics_img(
     data: dict, arg: str, name: str, plugin: str, day_index: int
 ):
     try:
-        plugin = plugins2settings_manager.get_plugin_data(plugin)['cmd'][0]
-    except (KeyError, IndexError):
+        plugin = plugins2settings_manager.get_plugin_data(plugin).cmd[0]
+    except (KeyError, IndexError, AttributeError):
         pass
     bar_graph = None
     if arg == "day_statistics":
